@@ -37,7 +37,7 @@ class FakeCollection:
         key = (query.get("user_id"), query.get("tool_id"), int(query.get("todo_id")))
         return self.docs.get(key)
 
-    def find(self, query):
+    def find(self, query, *args):
         user_id = query.get("user_id")
         tool_id = query.get("tool_id")
         filtered = [

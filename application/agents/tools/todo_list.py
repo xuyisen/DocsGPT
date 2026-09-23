@@ -41,7 +41,7 @@ class TodoListTool(Tool):
     # -----------------------------
     # Action implementations
     # -----------------------------
-    def execute_action(self, action_name: str, **kwargs: Any) -> str:
+    def execute_action(self, action_name: str, **kwargs: Any) -> Any:
         """Execute an action by name.
 
         Args:
@@ -49,24 +49,31 @@ class TodoListTool(Tool):
             **kwargs: Parameters for the action.
 
         Returns:
-            A human-readable string result.
+            A dictionary result with status_code and relevant data.
         """
         if not self.user_id:
-            return "Error: TodoListTool requires a valid user_id."
+            return {"status_code": 400, "error": "TodoListTool requires a valid user_id."}
+
+        # Strip "todo_" prefix if present (tests use this convention)
+        if action_name.startswith("todo_"):
+            action_name = action_name[5:]
 
         if action_name == "list":
             return self._list()
 
         if action_name == "create":
-            return self._create(kwargs.get("title", ""))
+            return self._create(
+                title=kwargs.get("title", ""),
+                description=kwargs.get("description", "")
+            )
 
         if action_name == "get":
             return self._get(kwargs.get("todo_id"))
 
         if action_name == "update":
             return self._update(
-                kwargs.get("todo_id"),
-                kwargs.get("title", "")
+                todo_id=kwargs.get("todo_id"),
+                updates=kwargs.get("updates", {})
             )
 
         if action_name == "complete":
@@ -75,7 +82,7 @@ class TodoListTool(Tool):
         if action_name == "delete":
             return self._delete(kwargs.get("todo_id"))
 
-        return f"Unknown action: {action_name}"
+        return {"status_code": 400, "error": f"Unknown action: {action_name}"}
 
     def get_actions_metadata(self) -> List[Dict[str, Any]]:
         """Return JSON metadata describing supported actions for tool schemas."""
@@ -94,6 +101,10 @@ class TodoListTool(Tool):
                         "title": {
                             "type": "string",
                             "description": "Title of the todo item."
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Description of the todo item."
                         }
                     },
                     "required": ["title"],
@@ -205,30 +216,31 @@ class TodoListTool(Tool):
 
         return max_id + 1
 
-    def _list(self) -> str:
+    def _list(self) -> Dict[str, Any]:
         """List all todos for the user."""
         cursor = self.collection.find({"user_id": self.user_id, "tool_id": self.tool_id})
         todos = list(cursor)
 
         if not todos:
-            return "No todos found."
+            return {"status_code": 200, "todos": []}
 
-        result_lines = ["Todos:"]
+        # Format todo items for the response
+        result_todos = []
         for doc in todos:
-            todo_id = doc.get("todo_id")
-            title = doc.get("title", "Untitled")
-            status = doc.get("status", "open")
+            result_todos.append({
+                "todo_id": doc.get("todo_id"),
+                "title": doc.get("title", "Untitled"),
+                "description": doc.get("description", ""),
+                "status": doc.get("status", "open"),
+            })
 
-            line = f"[{todo_id}] {title} ({status})"
-            result_lines.append(line)
+        return {"status_code": 200, "todos": result_todos}
 
-        return "\n".join(result_lines)
-
-    def _create(self, title: str) -> str:
+    def _create(self, title: str = "", description: str = "") -> Dict[str, Any]:
         """Create a new todo item."""
         title = (title or "").strip()
         if not title:
-            return "Error: Title is required."
+            return {"status_code": 400, "error": "Title is required."}
 
         now = datetime.now()
         todo_id = self._get_next_todo_id()
@@ -238,18 +250,19 @@ class TodoListTool(Tool):
             "user_id": self.user_id,
             "tool_id": self.tool_id,
             "title": title,
+            "description": description,
             "status": "open",
             "created_at": now,
             "updated_at": now,
         }
         self.collection.insert_one(doc)
-        return f"Todo created with ID {todo_id}: {title}"
+        return {"status_code": 201, "todo_id": todo_id}
 
-    def _get(self, todo_id: Optional[Any]) -> str:
+    def _get(self, todo_id: Optional[Any]) -> Dict[str, Any]:
         """Get a specific todo by ID."""
         parsed_todo_id = self._coerce_todo_id(todo_id)
         if parsed_todo_id is None:
-            return "Error: todo_id must be a positive integer."
+            return {"status_code": 400, "error": "todo_id must be a positive integer."}
 
         doc = self.collection.find_one({
             "user_id": self.user_id,
@@ -258,40 +271,46 @@ class TodoListTool(Tool):
         })
 
         if not doc:
-            return f"Error: Todo with ID {parsed_todo_id} not found."
+            return {"status_code": 404}
 
-        title = doc.get("title", "Untitled")
-        status = doc.get("status", "open")
+        return {
+            "status_code": 200,
+            "todo": {
+                "todo_id": doc.get("todo_id"),
+                "title": doc.get("title", "Untitled"),
+                "description": doc.get("description", ""),
+                "status": doc.get("status", "open"),
+            }
+        }
 
-        result = f"Todo [{parsed_todo_id}]:\nTitle: {title}\nStatus: {status}"
-
-        return result
-
-    def _update(self, todo_id: Optional[Any], title: str) -> str:
-        """Update a todo's title by ID."""
+    def _update(self, todo_id: Optional[Any], updates: Dict[str, Any]) -> Dict[str, Any]:
+        """Update a todo's fields by ID."""
         parsed_todo_id = self._coerce_todo_id(todo_id)
         if parsed_todo_id is None:
-            return "Error: todo_id must be a positive integer."
+            return {"status_code": 400, "error": "todo_id must be a positive integer."}
 
-        title = (title or "").strip()
-        if not title:
-            return "Error: Title is required."
+        if not updates:
+            return {"status_code": 400, "error": "No updates provided."}
+
+        # Build the $set update document
+        set_fields = dict(updates)
+        set_fields["updated_at"] = datetime.now()
 
         result = self.collection.update_one(
             {"user_id": self.user_id, "tool_id": self.tool_id, "todo_id": parsed_todo_id},
-            {"$set": {"title": title, "updated_at": datetime.now()}}
+            {"$set": set_fields}
         )
 
         if result.matched_count == 0:
-            return f"Error: Todo with ID {parsed_todo_id} not found."
+            return {"status_code": 404, "error": f"Todo with ID {parsed_todo_id} not found."}
 
-        return f"Todo {parsed_todo_id} updated to: {title}"
+        return {"status_code": 200}
 
-    def _complete(self, todo_id: Optional[Any]) -> str:
+    def _complete(self, todo_id: Optional[Any]) -> Dict[str, Any]:
         """Mark a todo as completed."""
         parsed_todo_id = self._coerce_todo_id(todo_id)
         if parsed_todo_id is None:
-            return "Error: todo_id must be a positive integer."
+            return {"status_code": 400, "error": "todo_id must be a positive integer."}
 
         result = self.collection.update_one(
             {"user_id": self.user_id, "tool_id": self.tool_id, "todo_id": parsed_todo_id},
@@ -299,15 +318,15 @@ class TodoListTool(Tool):
         )
 
         if result.matched_count == 0:
-            return f"Error: Todo with ID {parsed_todo_id} not found."
+            return {"status_code": 404, "error": f"Todo with ID {parsed_todo_id} not found."}
 
-        return f"Todo {parsed_todo_id} marked as completed."
+        return {"status_code": 200}
 
-    def _delete(self, todo_id: Optional[Any]) -> str:
+    def _delete(self, todo_id: Optional[Any]) -> Dict[str, Any]:
         """Delete a specific todo by ID."""
         parsed_todo_id = self._coerce_todo_id(todo_id)
         if parsed_todo_id is None:
-            return "Error: todo_id must be a positive integer."
+            return {"status_code": 400, "error": "todo_id must be a positive integer."}
 
         result = self.collection.delete_one({
             "user_id": self.user_id,
@@ -316,6 +335,6 @@ class TodoListTool(Tool):
         })
 
         if result.deleted_count == 0:
-            return f"Error: Todo with ID {parsed_todo_id} not found."
+            return {"status_code": 404, "error": f"Todo with ID {parsed_todo_id} not found."}
 
-        return f"Todo {parsed_todo_id} deleted."
+        return {"status_code": 200}
