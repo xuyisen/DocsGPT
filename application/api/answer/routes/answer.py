@@ -115,10 +115,14 @@ class AnswerResource(Resource, BaseAnswerResource):
                     error,
                     structured_info,
                 ) = stream_result
-            else:
+            elif len(stream_result) == 6:
                 conversation_id, response, sources, tool_calls, thought, error = (
                     stream_result
                 )
+                structured_info = None
+            else:
+                conversation_id, response, sources, tool_calls, error = stream_result
+                thought = None
                 structured_info = None
 
             if error:
