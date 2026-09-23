@@ -1,9 +1,10 @@
 import logging
 import os
-from typing import Any, Dict, Generator, List
+from collections.abc import Generator
+from typing import Any
 
 from application.agents.base import BaseAgent
-from application.logging import build_stack_data, LogContext
+from application.logging import LogContext, build_stack_data
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +34,14 @@ class ReActAgent(BaseAgent):
     4. Synthesizes final answer from all observations
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, gpt_model=None, **kwargs):
+        super().__init__(*args, gpt_model=gpt_model, **kwargs)
         self.plan: str = ""
-        self.observations: List[str] = []
+        self.observations: list[str] = []
 
     def _gen_inner(
         self, query: str, log_context: LogContext
-    ) -> Generator[Dict, None, None]:
+    ) -> Generator[dict, None, None]:
         """Execute ReAct reasoning loop with planning, action, and observation cycles"""
 
         self._reset_state()
@@ -78,7 +79,7 @@ class ReActAgent(BaseAgent):
 
     def _planning_phase(
         self, query: str, log_context: LogContext
-    ) -> Generator[Dict, None, None]:
+    ) -> Generator[dict, None, None]:
         """Generate strategic plan for query"""
         logger.info("ReActAgent: Creating plan...")
 
@@ -104,7 +105,7 @@ class ReActAgent(BaseAgent):
         self.plan = "".join(plan_parts)
 
     def _execution_phase(
-        self, query: str, tools_dict: Dict, log_context: LogContext
+        self, query: str, tools_dict: dict, log_context: LogContext
     ) -> Generator[bool, None, None]:
         """Execute plan with tool calls and observations"""
         execution_prompt = self._build_execution_prompt(query)
@@ -143,7 +144,7 @@ class ReActAgent(BaseAgent):
 
     def _synthesis_phase(
         self, query: str, log_context: LogContext
-    ) -> Generator[Dict, None, None]:
+    ) -> Generator[dict, None, None]:
         """Synthesize final answer from all observations"""
         logger.info("ReActAgent: Generating final answer...")
 

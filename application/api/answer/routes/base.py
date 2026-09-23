@@ -33,6 +33,7 @@ class BaseAnswerResource:
         self.db = db
         self.user_logs_collection = db["user_logs"]
         self.default_model_id = get_default_model_id()
+        self.gpt_model = self.default_model_id
         self.conversation_service = ConversationService()
 
     def validate_request(

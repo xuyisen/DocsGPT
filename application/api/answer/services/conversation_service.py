@@ -1,12 +1,11 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from application.core.mongo_db import MongoDB
-
-from application.core.settings import settings
 from bson import ObjectId
 
+from application.core.mongo_db import MongoDB
+from application.core.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +19,7 @@ class ConversationService:
 
     def get_conversation(
         self, conversation_id: str, user_id: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Retrieve a conversation with proper access control"""
         if not conversation_id or not user_id:
             return None
@@ -40,26 +39,27 @@ class ConversationService:
             conversation["_id"] = str(conversation["_id"])
             return conversation
         except Exception as e:
-            logger.error(f"Error fetching conversation: {str(e)}", exc_info=True)
+            logger.error(f"Error fetching conversation: {e!s}", exc_info=True)
             return None
 
     def save_conversation(
         self,
-        conversation_id: Optional[str],
+        conversation_id: str | None,
         question: str,
         response: str,
         thought: str,
-        sources: List[Dict[str, Any]],
-        tool_calls: List[Dict[str, Any]],
+        sources: list[dict[str, Any]],
+        tool_calls: list[dict[str, Any]],
         llm: Any,
         model_id: str,
-        decoded_token: Dict[str, Any],
-        index: Optional[int] = None,
-        api_key: Optional[str] = None,
-        agent_id: Optional[str] = None,
+        decoded_token: dict[str, Any],
+        gpt_model: str | None = None,
+        index: int | None = None,
+        api_key: str | None = None,
+        agent_id: str | None = None,
         is_shared_usage: bool = False,
-        shared_token: Optional[str] = None,
-        attachment_ids: Optional[List[str]] = None,
+        shared_token: str | None = None,
+        attachment_ids: list[str] | None = None,
     ) -> str:
         """Save or update a conversation in the database"""
         user_id = decoded_token.get("sub")

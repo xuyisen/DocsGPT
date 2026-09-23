@@ -1,7 +1,7 @@
 import logging
 import uuid
 from abc import ABC, abstractmethod
-from typing import Dict, Generator, List, Optional
+from collections.abc import Generator
 
 from bson.objectid import ObjectId
 
@@ -11,7 +11,7 @@ from application.core.mongo_db import MongoDB
 from application.core.settings import settings
 from application.llm.handlers.handler_creator import LLMHandlerCreator
 from application.llm.llm_creator import LLMCreator
-from application.logging import build_stack_data, log_activity, LogContext
+from application.logging import LogContext, build_stack_data, log_activity
 
 logger = logging.getLogger(__name__)
 
@@ -23,30 +23,32 @@ class BaseAgent(ABC):
         llm_name: str,
         model_id: str,
         api_key: str,
-        user_api_key: Optional[str] = None,
+        gpt_model: str | None = None,
+        user_api_key: str | None = None,
         prompt: str = "",
-        chat_history: Optional[List[Dict]] = None,
-        retrieved_docs: Optional[List[Dict]] = None,
-        decoded_token: Optional[Dict] = None,
-        attachments: Optional[List[Dict]] = None,
-        json_schema: Optional[Dict] = None,
-        limited_token_mode: Optional[bool] = False,
-        token_limit: Optional[int] = settings.DEFAULT_AGENT_LIMITS["token_limit"],
-        limited_request_mode: Optional[bool] = False,
-        request_limit: Optional[int] = settings.DEFAULT_AGENT_LIMITS["request_limit"],
+        chat_history: list[dict] | None = None,
+        retrieved_docs: list[dict] | None = None,
+        decoded_token: dict | None = None,
+        attachments: list[dict] | None = None,
+        json_schema: dict | None = None,
+        limited_token_mode: bool | None = False,
+        token_limit: int | None = settings.DEFAULT_AGENT_LIMITS["token_limit"],
+        limited_request_mode: bool | None = False,
+        request_limit: int | None = settings.DEFAULT_AGENT_LIMITS["request_limit"],
     ):
         self.endpoint = endpoint
         self.llm_name = llm_name
-        self.model_id = model_id
+        self.model_id = gpt_model or model_id
+        self.gpt_model = self.model_id
         self.api_key = api_key
         self.user_api_key = user_api_key
         self.prompt = prompt
         self.decoded_token = decoded_token or {}
         self.user: str = self.decoded_token.get("sub")
-        self.tool_config: Dict = {}
-        self.tools: List[Dict] = []
-        self.tool_calls: List[Dict] = []
-        self.chat_history: List[Dict] = chat_history if chat_history is not None else []
+        self.tool_config: dict = {}
+        self.tools: list[dict] = []
+        self.tool_calls: list[dict] = []
+        self.chat_history: list[dict] = chat_history if chat_history is not None else []
         self.llm = LLMCreator.create_llm(
             llm_name,
             api_key=api_key,
@@ -68,16 +70,16 @@ class BaseAgent(ABC):
     @log_activity()
     def gen(
         self, query: str, log_context: LogContext = None
-    ) -> Generator[Dict, None, None]:
+    ) -> Generator[dict, None, None]:
         yield from self._gen_inner(query, log_context)
 
     @abstractmethod
     def _gen_inner(
         self, query: str, log_context: LogContext
-    ) -> Generator[Dict, None, None]:
+    ) -> Generator[dict, None, None]:
         pass
 
-    def _get_tools(self, api_key: str = None) -> Dict[str, Dict]:
+    def _get_tools(self, api_key: str = None) -> dict[str, dict]:
         mongo = MongoDB.get_client()
         db = mongo[settings.MONGO_DB_NAME]
         agents_collection = db["agents"]
@@ -280,7 +282,7 @@ class BaseAgent(ABC):
         self,
         system_prompt: str,
         query: str,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Build messages using pre-rendered system prompt"""
         messages = [{"role": "system", "content": system_prompt}]
 
@@ -316,7 +318,7 @@ class BaseAgent(ABC):
         messages.append({"role": "user", "content": query})
         return messages
 
-    def _llm_gen(self, messages: List[Dict], log_context: Optional[LogContext] = None):
+    def _llm_gen(self, messages: list[dict], log_context: LogContext | None = None):
         gen_kwargs = {"model": self.model_id, "messages": messages}
 
         if (
@@ -348,10 +350,10 @@ class BaseAgent(ABC):
     def _llm_handler(
         self,
         resp,
-        tools_dict: Dict,
-        messages: List[Dict],
-        log_context: Optional[LogContext] = None,
-        attachments: Optional[List[Dict]] = None,
+        tools_dict: dict,
+        messages: list[dict],
+        log_context: LogContext | None = None,
+        attachments: list[dict] | None = None,
     ):
         resp = self.llm_handler.process_message_flow(
             self, resp, tools_dict, messages, attachments, True
