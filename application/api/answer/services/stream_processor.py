@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
 from bson.dbref import DBRef
-
 from bson.objectid import ObjectId
 
 from application.agents.agent_creator import AgentCreator

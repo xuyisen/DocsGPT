@@ -5,8 +5,8 @@ Main user API routes - registers all namespace modules.
 from flask import Blueprint
 
 from application.api import api
-from .agents import agents_ns, agents_sharing_ns, agents_webhooks_ns
 
+from .agents import agents_ns, agents_sharing_ns, agents_webhooks_ns
 from .analytics import analytics_ns
 from .attachments import attachments_ns
 from .conversations import conversations_ns
@@ -14,7 +14,6 @@ from .prompts import prompts_ns
 from .sharing import sharing_ns
 from .sources import sources_chunks_ns, sources_ns, sources_upload_ns
 from .tools import tools_mcp_ns, tools_ns
-
 
 user = Blueprint("user", __name__)
 

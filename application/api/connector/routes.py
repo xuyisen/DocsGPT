@@ -3,28 +3,17 @@ import datetime
 import json
 import uuid
 
-
 from bson.objectid import ObjectId
-from flask import (
-    Blueprint,
-    current_app,
-    jsonify,
-    make_response,
-    request
-)
-from flask_restx import fields, Namespace, Resource
+from flask import Blueprint, current_app, jsonify, make_response, request
+from flask_restx import Namespace, Resource, fields
 
-
+from application.api import api
 from application.api.user.tasks import (
     ingest_connector_task,
 )
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
-from application.api import api
-
-
 from application.parser.connectors.connector_creator import ConnectorCreator
-
 
 mongo = MongoDB.get_client()
 db = mongo[settings.MONGO_DB_NAME]
@@ -85,8 +74,9 @@ class ConnectorsCallback(Resource):
     def get(self):
         """Handle OAuth callback for external connectors"""
         try:
+            from flask import redirect, request
+
             from application.parser.connectors.connector_creator import ConnectorCreator
-            from flask import request, redirect
 
             authorization_code = request.args.get('code')
             state = request.args.get('state')
